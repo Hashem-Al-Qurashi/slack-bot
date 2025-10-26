@@ -49,7 +49,9 @@ Edit `.env` with your actual values:
    - `chat:write`
    - `commands`
    - `im:write`
-4. Add slash command `/support`
+4. Add slash commands:
+   - `/support` - Main support menu
+   - `/refund` - Quick refund processing
 5. Install app to your workspace
 
 ### 5. Run the Bot
@@ -65,7 +67,14 @@ Type `/support` in any channel to access the main menu with options to:
 - Ask AI support questions
 - Request refunds
 
-### Refund Processing
+### Quick Refund Command
+Type `/refund ch_xxxxxxxxxxxxx` to instantly process a refund:
+- Validates charge ID format (must start with `ch_`)
+- Processes full refund via Stripe API
+- Posts formatted receipt with refund details
+- Includes comprehensive error handling
+
+### Refund Processing (Modal)
 1. Click "Request Refund" button
 2. Enter Payment Intent ID from Stripe
 3. Specify refund amount in cents
@@ -120,6 +129,7 @@ Use Stripe's test environment:
 
 ### Slack Commands
 - `/support` - Main support menu
+- `/refund ch_xxxxx` - Process charge refund
 
 ### Interactive Elements
 - `ask_question_btn` - Opens question modal

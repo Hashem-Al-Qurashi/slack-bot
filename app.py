@@ -68,6 +68,188 @@ def support_command(ack, respond, command):
     
     respond(blocks=blocks)
 
+@app.command("/refund")
+def refund_command(ack, respond, command):
+    """Handle /refund slash command with charge ID"""
+    ack()
+    
+    charge_id = command.get('text', '').strip()
+    
+    # Validate charge ID
+    if not charge_id:
+        respond({
+            "response_type": "ephemeral",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "❌ Please provide a charge ID.\n\nUsage: `/refund ch_xxxxxxxxxxxxx`"
+                    }
+                }
+            ]
+        })
+        return
+    
+    if not charge_id.startswith('ch_'):
+        respond({
+            "response_type": "ephemeral",
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "❌ Invalid charge ID format. Charge IDs must start with `ch_`.\n\nUsage: `/refund ch_xxxxxxxxxxxxx`"
+                    }
+                }
+            ]
+        })
+        return
+    
+    # Show processing message
+    respond({
+        "response_type": "in_channel",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "⏳ Processing refund..."
+                }
+            }
+        ]
+    })
+    
+    try:
+        # Get charge details first
+        charge = stripe.Charge.retrieve(charge_id)
+        
+        # Process full refund
+        refund = stripe.Refund.create(
+            charge=charge_id,
+            reason='requested_by_customer',
+            metadata={
+                'slack_user_id': command['user_id'],
+                'slack_channel_id': command['channel_id']
+            }
+        )
+        
+        # Format amounts for display
+        refund_amount = refund.amount / 100
+        currency = refund.currency.upper()
+        
+        # Create receipt blocks
+        receipt_blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "💰 Refund Receipt"
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Refund ID:*\n{refund.id}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Amount:*\n${refund_amount:.2f} {currency}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Status:*\n{refund.status.upper()}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Original Charge:*\n{charge_id}"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Reason:*\nRequested by customer"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Timestamp:*\n<!date^{refund.created}^{{date_short}} {{time}}|{refund.created}>"
+                    }
+                ]
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "🧪 *TEST MODE* - Refund will appear on the original payment method within 5-10 business days."
+                    }
+                ]
+            }
+        ]
+        
+        # Post receipt in channel
+        respond({
+            "response_type": "in_channel",
+            "replace_original": True,
+            "blocks": receipt_blocks
+        })
+        
+    except stripe.error.InvalidRequestError as e:
+        error_msg = str(e)
+        if "No such charge" in error_msg:
+            error_text = f"❌ Charge ID `{charge_id}` not found. Please verify the charge ID is correct."
+        elif "already been refunded" in error_msg:
+            error_text = f"❌ This charge has already been fully refunded."
+        else:
+            error_text = f"❌ Invalid request: {error_msg}"
+            
+        respond({
+            "response_type": "ephemeral",
+            "replace_original": True,
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": error_text
+                    }
+                }
+            ]
+        })
+        
+    except stripe.error.StripeError as e:
+        respond({
+            "response_type": "ephemeral",
+            "replace_original": True,
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"❌ Stripe error: {str(e)}"
+                    }
+                }
+            ]
+        })
+        
+    except Exception as e:
+        respond({
+            "response_type": "ephemeral",
+            "replace_original": True,
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"❌ An error occurred while processing the refund: {str(e)}"
+                    }
+                }
+            ]
+        })
+
 @app.action("ask_question_btn")
 def handle_ask_question(ack, body, client):
     """Handle ask question button click"""
